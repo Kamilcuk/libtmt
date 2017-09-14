@@ -43,11 +43,13 @@
 #define CB(vt, m, a) ((vt)->cb? (vt)->cb(m, vt, a, (vt)->p) : (void)0)
 #define INESC ((vt)->state)
 
+#define UNUSED(x) ((void)x) // remove unused warning from a variable
+
 #define COMMON_VARS             \
-    TMTSCREEN *s = &vt->screen; \
-    TMTPOINT *c = &vt->curs;    \
-    TMTLINE *l = CLINE(vt);     \
-    TMTCHAR *t = vt->tabs->chars
+    TMTSCREEN *s = &vt->screen;   UNUSED(s); \
+    TMTPOINT *c = &vt->curs;      UNUSED(c); \
+    TMTLINE *l = CLINE(vt);       UNUSED(l); \
+    TMTCHAR *t = vt->tabs->chars; UNUSED(t)
 
 #define HANDLER(name) static void name (TMT *vt) { COMMON_VARS; 
 
