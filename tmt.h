@@ -32,6 +32,10 @@
 #include <stddef.h>
 #include <wchar.h>
 
+#define TMT_BUF_MAX 100
+#define TMT_PAR_MAX 8
+#define TMT_TAB 8
+
 /**** INVALID WIDE CHARACTER */
 #ifndef TMT_INVALID_CHAR
 #define TMT_INVALID_CHAR ((wchar_t)0xfffd)
@@ -126,11 +130,45 @@ typedef enum{
 
 typedef void (*TMTCALLBACK)(tmt_msg_t m, struct TMT *v, const void *r, void *p);
 
+struct TMT{
+    TMTPOINT curs, oldcurs;
+    TMTATTRS attrs, oldattrs;
+
+    bool dirty, acs, ignored;
+    TMTSCREEN screen;
+    TMTLINE *tabs;
+
+    TMTCALLBACK cb;
+    void *p;
+    const wchar_t *acschars;
+
+    mbstate_t ms;
+    size_t nmb;
+    char mb[TMT_BUF_MAX + 1];
+
+    size_t pars[TMT_PAR_MAX];
+    size_t npar;
+    size_t arg;
+    enum {S_NUL, S_ESC, S_ARG} state;
+};
+
 /**** PUBLIC FUNCTIONS */
 TMT *tmt_open(size_t nline, size_t ncol, TMTCALLBACK cb, void *p,
               const wchar_t *acs);
 void tmt_close(TMT *vt);
 bool tmt_resize(TMT *vt, size_t nline, size_t ncol);
+
+#define TMT_DECLARE(var_vt, var_lines, var_buffer, var_tabs, nline, ncol) \
+		TMT (var_vt) ; \
+		TMTLINE * (var_lines) [(nline)]; \
+		char (var_buffer) [(nline) * (sizeof(TMTLINE) + (ncol) * sizeof(TMTCHAR))]; \
+		char (var_tabs) [sizeof(TMTLINE) + (ncol) * sizeof(TMTCHAR)];
+bool tmt_init(TMT *vt, TMTLINE **lines, char *buffer, char *tabs,
+		size_t nline, size_t ncol, TMTCALLBACK cb, void *p,
+         const wchar_t *acs);
+void tmt_deinit(TMT *vt);
+bool tmt_resize_static(TMT *vt, size_t nline, size_t ncol);
+
 void tmt_write(TMT *vt, const char *s, size_t n);
 const TMTSCREEN *tmt_screen(const TMT *vt);
 const TMTPOINT *tmt_cursor(const TMT *vt);

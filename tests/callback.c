@@ -2,6 +2,8 @@
 #include <stdlib.h>
 #include "callback.h"
 
+struct callback_data_s cd_global;
+
 void
 callback(tmt_msg_t m, TMT *vt, const void *a, void *p)
 {
@@ -9,6 +11,9 @@ callback(tmt_msg_t m, TMT *vt, const void *a, void *p)
     const TMTSCREEN *s = tmt_screen(vt);
     const TMTPOINT *c = tmt_cursor(vt);
     struct callback_data_s *cd = p;
+    if ( cd == NULL ) {
+    	cd = &cd_global;
+    }
     cd->lastm = m;
 
     switch (m){

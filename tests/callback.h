@@ -3,6 +3,8 @@
 
 #include "../tmt.h"
 
+#include "stdint.h"
+
 struct callback_data_s {
 	tmt_msg_t lastm;
 	bool dirty[20];
