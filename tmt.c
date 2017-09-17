@@ -31,9 +31,24 @@
 #include <string.h>
 #include "tmt.h"
 
-#define MAX(x, y) (((size_t)(x) > (size_t)(y)) ? (size_t)(x) : (size_t)(y))
-#define MIN(x, y) (((size_t)(x) < (size_t)(y)) ? (size_t)(x) : (size_t)(y))
-#define CLINE(vt) (vt)->screen.lines[MIN((vt)->curs.r, (vt)->screen.nline - 1)]
+#ifndef __GNUC__
+# define MAX(x, y) (((size_t)(x) > (size_t)(y)) ? (size_t)(x) : (size_t)(y))
+# define MIN(x, y) (((size_t)(x) < (size_t)(y)) ? (size_t)(x) : (size_t)(y))
+#else
+# define MAX(x, y) \
+    ({ __typeof__ (x) _x = (x); \
+        __typeof__ (y) _y = (y); \
+        _x > _y ? _x : _y; })
+# define MIN(x, y) \
+    ({ __typeof__ (x) _x = (x); \
+        __typeof__ (y) _y = (y); \
+        _x < _y ? _x : _y; })
+#endif
+
+#define CLINE_IDX(vt)          TMT_LINE_IDX((vt),(vt)->curs.r)
+#define CLINE(vt)              (&(vt)->screen.chars[CLINE_IDX(vt)])
+#define DIRTY(vt,r)            (&(vt)->screen.dirty[TMT_LINE_IDX(vt,r)])
+#define CDIRTY(vt)             (&(vt)->screen.dirty[CLINE_IDX(vt)])
 
 #define P0(x) (vt->pars[x])
 #define P1(x) (vt->pars[x]? vt->pars[x] : 1)
@@ -45,8 +60,9 @@
 #define COMMON_VARS             \
     TMTSCREEN *s = &vt->screen;   UNUSED(s); \
     TMTPOINT *c = &vt->curs;      UNUSED(c); \
-    TMTLINE *l = CLINE(vt);       UNUSED(l); \
-    TMTCHAR *t = vt->tabs->chars; UNUSED(t)
+    TMTCHAR *l = CLINE(vt);       UNUSED(l); \
+    size_t lidx = CLINE_IDX(vt);  UNUSED(lidx); \
+    TMTCHAR *t = vt->tabs;        UNUSED(t)
 
 #define HANDLER(name) static void name (TMT *vt) { COMMON_VARS; 
 
@@ -73,62 +89,61 @@ dirtylines(TMT *vt, size_t s, size_t e)
 {
     vt->dirty = true;
     for (size_t i = s; i < e; i++)
-        vt->screen.lines[i]->dirty = true;
+       vt->screen.dirty[i] = true;
 }
 
 static void
-clearline(TMT *vt, TMTLINE *l, size_t s, size_t e)
+clearchars(TMTCHAR *base, size_t n)
 {
-    vt->dirty = l->dirty = true;
-    for (size_t i = s; i < e && i < vt->screen.ncol; i++){
-        l->chars[i].a = defattrs;
-        l->chars[i].c = L' ';
+    for (; n; --n){
+    	base->a = defattrs;
+    	base->c = L' ';
+    	++base;
     }
+}
+
+static void
+clearline(TMT *vt, size_t lidx, size_t s, size_t e)
+{
+    vt->dirty = vt->screen.dirty[lidx] = true;
+	e = MIN(e, vt->screen.ncol);
+	clearchars(&vt->screen.chars[lidx], e);
 }
 
 static void
 clearlines(TMT *vt, size_t r, size_t n)
 {
-    for (size_t i = r; i < r + n && i < vt->screen.nline; i++)
-        clearline(vt, vt->screen.lines[i], 0, vt->screen.ncol);
+	n = MIN(r + n, vt->screen.nline);
+    for (size_t i = r; i < n; i++)
+        clearline(vt, TMT_LINE_IDX(vt, i), 0, vt->screen.ncol);
 }
 
+/**
+ * screen up
+ */
 static void
 scrup(TMT *vt, size_t r, size_t n)
 {
     n = MIN(n, vt->screen.nline - 1 - r);
+    if (n == 0) return;
 
-    if (n){
-        TMTLINE *buf[n];
-
-        memcpy(buf, vt->screen.lines + r, n * sizeof(TMTLINE *));
-        memmove(vt->screen.lines + r, vt->screen.lines + r + n,
-                (vt->screen.nline - n - r) * sizeof(TMTLINE *));
-        memcpy(vt->screen.lines + (vt->screen.nline - n),
-               buf, n * sizeof(TMTLINE *));
-
-        clearlines(vt, vt->screen.nline - n, n);
-        dirtylines(vt, r, vt->screen.nline);
-    }
+    memmove(TMT_LINE(vt,r), TMT_LINE(vt,r+n), n * vt->screen.ncol * sizeof(TMTCHAR));
+    clearlines(vt, vt->screen.nline - n, n);
+    dirtylines(vt, r, vt->screen.nline);
 }
 
+/**
+ * screen down
+ */
 static void
 scrdn(TMT *vt, size_t r, size_t n)
 {
     n = MIN(n, vt->screen.nline - 1 - r);
+    if (n == 0) return;
 
-    if (n){
-        TMTLINE *buf[n];
-
-        memcpy(buf, vt->screen.lines + (vt->screen.nline - n),
-               n * sizeof(TMTLINE *));
-        memmove(vt->screen.lines + r + n, vt->screen.lines + r,
-                (vt->screen.nline - n - r) * sizeof(TMTLINE *));
-        memcpy(vt->screen.lines + r, buf, n * sizeof(TMTLINE *));
-    
-        clearlines(vt, r, n);
-        dirtylines(vt, r, vt->screen.nline);
-    }
+    memmove(TMT_LINE(vt,r+n), TMT_LINE(vt,r), n * vt->screen.ncol * sizeof(TMTCHAR));
+    clearlines(vt, r, n);
+    dirtylines(vt, r, vt->screen.nline);
 }
 
 HANDLER(ed)
@@ -136,10 +151,10 @@ HANDLER(ed)
     size_t e = s->nline;
 
     switch (P0(0)){
-        case 0: b = c->r + 1; clearline(vt, l, c->c, vt->screen.ncol); break;
-        case 1: e = c->r - 1; clearline(vt, l, 0, c->c);               break;
-        case 2:  /* use defaults */                                    break;
-        default: /* do nothing   */                                    return;
+        case 0: b = c->r + 1; clearline(vt, lidx, c->c, vt->screen.ncol); break;
+        case 1: e = c->r - 1; clearline(vt, lidx, 0, c->c);               break;
+        case 2:  /* use defaults */                                       break;
+        default: /* do nothing   */                                       return;
     }
 
     clearlines(vt, b, e - b);
@@ -149,27 +164,27 @@ HANDLER(ich)
     size_t n = P1(0); /* XXX use MAX */
     if (n > s->ncol - c->c - 1) n = s->ncol - c->c - 1;
 
-    memmove(l->chars + c->c + n, l->chars + c->c,
+    memmove(l + c->c + n, l + c->c,
             MIN(s->ncol - 1 - c->c,
             (s->ncol - c->c - n - 1)) * sizeof(TMTCHAR));
-    clearline(vt, l, c->c, n);
+    clearline(vt, lidx, c->c, n);
 }
 
 HANDLER(dch)
     size_t n = P1(0); /* XXX use MAX */
     if (n > s->ncol - c->c) n = s->ncol - c->c;
 
-    memmove(l->chars + c->c, l->chars + c->c + n,
+    memmove(l + c->c, l + c->c + n,
             (s->ncol - c->c - n) * sizeof(TMTCHAR));
 
-    clearline(vt, l, s->ncol - c->c - n, s->ncol);
+    clearline(vt, lidx, s->ncol - c->c - n, s->ncol);
 }
 
 HANDLER(el)
     switch (P0(0)){
-        case 0: clearline(vt, l, c->c, vt->screen.ncol);         break;
-        case 1: clearline(vt, l, 0, MIN(c->c + 1, s->ncol - 1)); break;
-        case 2: clearline(vt, l, 0, vt->screen.ncol);            break;
+        case 0: clearline(vt, lidx, c->c, vt->screen.ncol);         break;
+        case 1: clearline(vt, lidx, 0, MIN(c->c + 1, s->ncol - 1)); break;
+        case 2: clearline(vt, lidx, 0, vt->screen.ncol);            break;
     }
 }
 
@@ -198,7 +213,7 @@ HANDLER(sgr)
 
 HANDLER(rep)
     if (!c->c) return;
-    wchar_t r = l->chars[c->c - 1].c;
+    wchar_t r = l[c->c - 1].c;
     for (size_t i = 0; i < P1(0); i++)
         writecharatcurs(vt, r);
 }
@@ -269,11 +284,11 @@ handlechar(TMT *vt, char i)
     DO(S_ARG, "P",          dch(vt))
     DO(S_ARG, "S",          scrup(vt, 0, P1(0)))
     DO(S_ARG, "T",          scrdn(vt, 0, P1(0)))
-    DO(S_ARG, "X",          clearline(vt, l, c->c, P1(0)))
+    DO(S_ARG, "X",          clearline(vt, lidx, c->c, P1(0)))
     DO(S_ARG, "Z",          while (c->c && t[--c->c].c != L'*'))
     DO(S_ARG, "b",          rep(vt));
     DO(S_ARG, "c",          CB(vt, TMT_MSG_ANSWER, "\033[?6c"))
-    DO(S_ARG, "g",          if (P0(0) == 3) clearline(vt, vt->tabs, 0, s->ncol))
+    DO(S_ARG, "g",          if (P0(0) == 3) clearchars(vt->tabs, s->ncol))
     DO(S_ARG, "m",          sgr(vt))
     DO(S_ARG, "n",          if (P0(0) == 6) dsr(vt))
     DO(S_ARG, "h",          if (P0(0) == 25) CB(vt, TMT_MSG_CURSOR, "t"))
@@ -293,37 +308,20 @@ notify(TMT *vt, bool update, bool moved)
     if (moved) CB(vt, TMT_MSG_MOVED, &vt->curs);
 }
 
-static void
-freelines(TMT *vt, size_t s, size_t n)
-{
-    for (size_t i = s; i < s + n; i++){
-        free(vt->screen.lines[i]);
-        vt->screen.lines[i] = NULL;
-    }
-}
-
 static bool
 tmt_resize_realloc(TMT *vt, size_t nline, size_t ncol)
 {
     if (nline < 2 || ncol < 2) return false;
 
-    if (nline < vt->screen.nline)
-        freelines(vt, nline, vt->screen.nline - nline);
-
-    TMTLINE **l = realloc(vt->screen.lines, nline * sizeof(TMTLINE *));
+    TMTCHAR *l = realloc(vt->screen.chars, nline * ncol * sizeof(TMTCHAR));
     if (!l) return false;
+    vt->screen.chars = l;
 
-    vt->screen.lines = l;
-    if (nline > vt->screen.nline)
-    	memset(&vt->screen.lines[vt->screen.nline], 0, nline - vt->screen.nline);
+    bool *d = realloc(vt->screen.dirty, nline * sizeof(TMTCHAR));
+    if (!d) return false;
+    vt->screen.dirty = d;
 
-    for (size_t i = 0; i < nline; i++){
-        TMTLINE *nl = realloc( vt->screen.lines[i], sizeof(TMTLINE) + ncol * sizeof(TMTCHAR));
-        if (!nl) return false;
-        vt->screen.lines[i] = nl;
-    }
-
-	TMTLINE *t = realloc(vt->tabs, sizeof(TMTLINE) + ncol * sizeof(TMTCHAR));
+    TMTCHAR *t = realloc(vt->tabs, ncol * sizeof(TMTCHAR));
     if (!t) return false;
     vt->tabs = t;
 
@@ -360,8 +358,7 @@ tmt_open(size_t nline, size_t ncol, TMTCALLBACK cb, void *p,
 void
 tmt_close(TMT *vt)
 {
-	freelines(vt, 0, vt->screen.nline);
-    free(vt->screen.lines);
+    free(vt->screen.chars);
 	free(vt->tabs);
 	free(vt);
 }
@@ -374,19 +371,17 @@ tmt_resize(TMT *vt, size_t nline, size_t ncol)
 }
 
 bool
-tmt_init(TMT *vt, TMTLINE **lines, char *buffer, char *tabs,
+tmt_init(TMT *vt, bool *dirty, TMTCHAR *chars, TMTCHAR *tabs,
 		size_t nline, size_t ncol, TMTCALLBACK cb, void *p,
         const wchar_t *acs)
 {
-    if (!vt || !lines || !buffer || !tabs) return false;
+    if (!vt || !chars || !tabs) return false;
 
     memset(vt, 0, sizeof(TMT));
 
-	for(size_t i = 0; i < nline; ++i) {
-		lines[i] = (TMTLINE*)&buffer[ i * (sizeof(TMTLINE) + ncol * sizeof(TMTCHAR)) ];
-	}
-	vt->screen.lines = lines;
-	vt->tabs = (TMTLINE*)&tabs[0];
+	vt->screen.chars = chars;
+	vt->screen.dirty = dirty;
+	vt->tabs = tabs;
 
 	return _tmt_init(vt, nline, ncol, cb, p, acs);
 }
@@ -402,22 +397,21 @@ tmt_resize_static(TMT *vt, size_t nline, size_t ncol)
 {
     if (nline < 2 || ncol < 2) return false;
 
-
     for (size_t i = 0; i < nline; i++){
-        if (i >= vt->screen.nline)
-            clearline(vt, vt->screen.lines[i], 0, ncol);
-        else
-            clearline(vt, vt->screen.lines[i], vt->screen.ncol, ncol);
+        if (i >= vt->screen.nline) {
+            clearline(vt, TMT_LINE_IDX(vt, i), 0, ncol);
+        } else {
+            clearline(vt, TMT_LINE_IDX(vt, i), vt->screen.ncol, ncol);
+        }
     }
 
     vt->screen.ncol = ncol;
     vt->screen.nline = nline;
 
-    clearline(vt, vt->tabs, 0, ncol);
-
-    vt->tabs->chars[0].c = vt->tabs->chars[ncol - 1].c = L'*';
+    clearchars(vt->tabs, ncol);
+    vt->tabs[0].c = vt->tabs[ncol - 1].c = L'*';
     for (size_t i = 0; i < ncol; i++) if (i % TMT_TAB == 0)
-        vt->tabs->chars[i].c = L'*';
+        vt->tabs[i].c = L'*';
 
     fixcursor(vt);
     dirtylines(vt, 0, nline);
@@ -436,9 +430,9 @@ writecharatcurs(TMT *vt, wchar_t w)
     if (wcwidth(w) < 0) return;
     #endif
 
-    CLINE(vt)->chars[vt->curs.c].c = w;
-    CLINE(vt)->chars[vt->curs.c].a = vt->attrs;
-    CLINE(vt)->dirty = vt->dirty = true;
+    CLINE(vt)->c = w;
+    CLINE(vt)->a = vt->attrs;
+    *CDIRTY(vt) = vt->dirty = true;
 
     if (c->c < s->ncol - 1)
         c->c++;
@@ -509,11 +503,11 @@ tmt_cursor(const TMT *vt)
 }
 
 void
-tmt_clean(TMT *vt)
+tmt_dirty_clean(TMT *vt)
 {
 	vt->dirty = false;
     for (size_t i = 0; i < vt->screen.nline; i++)
-         vt->screen.lines[i]->dirty = false;
+         vt->screen.dirty[i] = false;
 }
 
 void

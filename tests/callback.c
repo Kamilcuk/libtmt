@@ -29,25 +29,25 @@ callback(tmt_msg_t m, TMT *vt, const void *a, void *p)
         	printf("TMT_MSG_UPDATE\n");
 
             for (size_t r = 0; r < s->nline; r++){
-                if (s->lines[r]->dirty) {
-                	cd->dirty[r] = true;
-                }
-                for (size_t c = 0; c < s->ncol; c++){
-                    cd->screen[r][c] = s->lines[r]->chars[c].c;
-                }
+                cd->dirty[r] = s->dirty[r];
+//                for (size_t c = 0; c < s->ncol; c++){
+//                    cd->screen[r][c] = s->lines[r]->chars[c].c;
+//                }
             }
 
             for (size_t r = 0; r < s->nline; r++){
-                if (s->lines[r]->dirty) {
+                if (s->dirty[r]) {
+                	s->dirty[r] = false;
                 	printf("line: %lu\n\"", r);
+                	TMTCHAR *line = tmt_line(vt, r);
                     for (size_t c = 0; c < s->ncol; c++){
-                        printf("%lc", s->lines[r]->chars[c].c);
+                    	putchar(line[c].c);
                     }
                     printf("\"\n");
                 }
             }
             /* let tmt know we've redrawn the screen */
-            tmt_clean(vt);
+            tmt_dirty_clean(vt);
             break;
 
         case TMT_MSG_ANSWER:

@@ -32,9 +32,22 @@
 #include <stddef.h>
 #include <wchar.h>
 
+#include "tmt-config.h"
+
+/**** Internal buffer size */
+#ifndef TMT_BUF_MAX
 #define TMT_BUF_MAX 100
+#endif
+
+/**** */
+#ifndef TMT_PAR_MAX
 #define TMT_PAR_MAX 8
+#endif
+
+/**** TAB SIZE */
+#ifndef TMT_TAB
 #define TMT_TAB 8
+#endif
 
 /**** INVALID WIDE CHARACTER */
 #ifndef TMT_INVALID_CHAR
@@ -64,6 +77,10 @@
 #define TMT_KEY_F8             "\033OW"
 #define TMT_KEY_F9             "\033OX"
 #define TMT_KEY_F10            "\033OY"
+
+/* accesing line in a screen */
+#define TMT_LINE_IDX(vt,r)         ((vt)->screen.ncol*(r))
+#define TMT_LINE(vt,r)             (&(vt)->screen.chars[TMT_LINE_IDX(vt,r)])
 
 /**** BASIC DATA STRUCTURES */
 typedef struct TMT TMT;
@@ -105,18 +122,12 @@ struct TMTPOINT{
     size_t c;
 };
 
-typedef struct TMTLINE TMTLINE;
-struct TMTLINE{
-    bool dirty;
-    TMTCHAR chars[];
-};
-
 typedef struct TMTSCREEN TMTSCREEN;
 struct TMTSCREEN{
     size_t nline;
     size_t ncol;
-
-    TMTLINE **lines;
+    bool *dirty; //! array of nline elements. True means that this line is "dirty" and should be redraw.
+    TMTCHAR *chars; //! array of nline*ncol elemnents. Represents all currently written on the screen.
 };
 
 /**** CALLBACK SUPPORT */
@@ -136,7 +147,7 @@ struct TMT{
 
     bool dirty, acs, ignored;
     TMTSCREEN screen;
-    TMTLINE *tabs;
+    TMTCHAR *tabs; //! ncol elements
 
     TMTCALLBACK cb;
     void *p;
@@ -158,21 +169,29 @@ TMT *tmt_open(size_t nline, size_t ncol, TMTCALLBACK cb, void *p,
 void tmt_close(TMT *vt);
 bool tmt_resize(TMT *vt, size_t nline, size_t ncol);
 
-#define TMT_DECLARE(var_vt, var_lines, var_buffer, var_tabs, nline, ncol) \
-		TMT (var_vt) ; \
-		TMTLINE * (var_lines) [(nline)]; \
-		char (var_buffer) [(nline) * (sizeof(TMTLINE) + (ncol) * sizeof(TMTCHAR))]; \
-		char (var_tabs) [sizeof(TMTLINE) + (ncol) * sizeof(TMTCHAR)];
-bool tmt_init(TMT *vt, TMTLINE **lines, char *buffer, char *tabs,
+#define TMT_DECLARE(var_vt, var_dirty, var_chars, var_tabs, nline, ncol) \
+		TMTCHAR (var_chars) [(nline)*(ncol)]; \
+		bool (var_dirty) [(nline)]; \
+		TMTCHAR (var_tabs) [(ncol)]; \
+		TMT (var_vt)
+
+bool tmt_init(TMT *vt, bool *dirty, TMTCHAR *chars, TMTCHAR *tabs,
 		size_t nline, size_t ncol, TMTCALLBACK cb, void *p,
          const wchar_t *acs);
 void tmt_deinit(TMT *vt);
 bool tmt_resize_static(TMT *vt, size_t nline, size_t ncol);
 
 void tmt_write(TMT *vt, const char *s, size_t n);
+void tmt_reset(TMT *vt);
+
+void tmt_dirty_clean(TMT *vt);
+
 const TMTSCREEN *tmt_screen(const TMT *vt);
 const TMTPOINT *tmt_cursor(const TMT *vt);
-void tmt_clean(TMT *vt);
-void tmt_reset(TMT *vt);
+static inline TMTCHAR *
+tmt_line(TMT *vt, size_t line)
+{
+	return TMT_LINE(vt, line);
+}
 
 #endif

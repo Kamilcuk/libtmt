@@ -1,8 +1,8 @@
 
 CC=gcc
-CFLAGS=-Wall -I. -I.. -O3 -g3
+CFLAGS=-Wall -I. -I.. -g3 -O3 -std=c99
 LDFLAGS=-lcheck
-mains = main.out $(patsubst %.check.c, %-check.out, $(wildcard ./*.check.c))
+mains = $(patsubst %-check.c, %-check.out, $(wildcard ./*-check.c)) main.out 
 define \n
 
 
@@ -14,11 +14,14 @@ all: $(mains)
 %-check.c: %.check.c
 	checkmk $< > $@
 
-%.out: ../tmt.o callback.o %.o
+%.out: callback.o %.o
+	gcc $(CFLAGS) $(LDFLAGS) -o $@ $^
+	
+main.out: callback.o main.o ../tmt.o
 	gcc $(CFLAGS) $(LDFLAGS) -o $@ $^
 
 test: $(mains)
 	$(foreach file, $?, ./$(file)${\n})
 
 distclean:
-	rm -f $(mains) 
+	rm -f *.o ../tmt.o $(mains) 

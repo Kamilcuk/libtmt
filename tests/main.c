@@ -23,8 +23,8 @@ int main() {
 		tmt_close(vt);
 	}
 	{
-		TMT_DECLARE(vt, vt_lines, vt_buffer, vt_tabs, 5, 10);
-		tmt_init(&vt, vt_lines, vt_buffer, vt_tabs, 2, 10, callback, NULL, NULL);
+		TMT_DECLARE(vt, vt_dirty, vt_chars, vt_tabs, 5, 10);
+		tmt_init(&vt, vt_dirty, vt_chars, vt_tabs, 2, 10, callback, NULL, NULL);
 		tmt_write(&vt, longstr, longstr_len);
 		tmt_resize_static(&vt, 5, 10);
 		tmt_write(&vt, longstr, longstr_len);

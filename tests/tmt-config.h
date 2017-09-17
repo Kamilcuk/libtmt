@@ -8,5 +8,6 @@
 #ifndef TESTS_TMT_CONFIG_H_
 #define TESTS_TMT_CONFIG_H_
 
+/* all default */
 
 #endif /* TESTS_TMT_CONFIG_H_ */
