@@ -40,5 +40,5 @@ clean:
 	rm -f *.out 
 
 test: $(mains)
-	$(foreach file, $?, ./$(file)${\n})
+	$(foreach file, $?, valgrind -q ./$(file)${\n})
 
