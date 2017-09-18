@@ -7,38 +7,73 @@
 char longstr[] = "qwertyuiopasdfghjkl;zxcvbnm,qwertyuiopasdfghjkl;zxcvbnm,qwertyuiopasdfghjklzxcvbnm\n";
 const int longstr_len = sizeof(longstr)/sizeof(*longstr);
 
+#define _ck_assert_char(X, OP, Y) do { \
+  intmax_t _ck_x = (X); \
+  intmax_t _ck_y = (Y); \
+  ck_assert_msg(_ck_x OP _ck_y, "Assertion '%s' failed: %s == '%c', %s == '%c'", #X" "#OP" "#Y, #X, _ck_x, #Y, _ck_y); \
+} while (0)
+
+static void tmt_printf(TMT *vt)
+{
+	printf("- tmt_printf -\n");
+	for(uint8_t j=0;j<vt->screen.nline;++j) {
+		for(uint8_t i=0;i<vt->screen.ncol;++i) {
+			printf("%c", TMT_CHAR(vt,j,i).c);
+		}
+		printf("\n");
+	}
+}
+
 START_TEST(test_scrdn)
 {
-	TMT *vt = tmt_open(2, 10, NULL, NULL, NULL);
-	for(uint8_t i=0;i<10;++i) {
-		vt->screen.chars[i].c = '1';
-		vt->screen.chars[10+i].c = '2';
+	TMT *vt = tmt_open(5, 2, NULL, NULL, NULL);
+	for(uint8_t j=0;j<vt->screen.nline;++j) {
+		for(uint8_t i=0;i<vt->screen.ncol;++i) {
+			TMT_CHAR(vt,j,i).c = '0' + i + j;
+		}
 	}
 
-	scrdn(vt, 0, 1);
+	const int move = 2;
+	scrdn(vt, 0, move);
 
-	for(uint8_t i=0;i<10;++i) {
-		ck_assert_int_eq(vt->screen.chars[i].c, ' ');
-		ck_assert_int_eq(vt->screen.chars[10+i].c, '1');
+	for(uint8_t j=0;j<move;++j) {
+		for(uint8_t i=0;i<vt->screen.ncol;++i) {
+			_ck_assert_char(TMT_CHAR(vt,j,i).c, ==, ' ');
+		}
 	}
+	for(uint8_t j=move;j<vt->screen.nline;++j) {
+		for(uint8_t i=0;i<vt->screen.ncol;++i) {
+			_ck_assert_char(TMT_CHAR(vt,j,i).c, ==, '0' + i + j - move);
+		}
+	}
+
 	tmt_close(vt);
 }
 END_TEST
 
 START_TEST(test_scrup)
 {
-	TMT *vt = tmt_open(2, 10, NULL, NULL, NULL);
-	for(uint8_t i=0;i<10;++i) {
-		vt->screen.chars[i].c = '1';
-		vt->screen.chars[10+i].c = '2';
+	TMT *vt = tmt_open(5, 2, NULL, NULL, NULL);
+	for(uint8_t j=0;j<vt->screen.nline;++j) {
+		for(uint8_t i=0;i<vt->screen.ncol;++i) {
+			TMT_CHAR(vt,j,i).c = '0' + i + j;
+		}
 	}
 
-	scrup(vt, 0, 1);
+	const int move = 2;
+	scrup(vt, 0, move);
 
-	for(uint8_t i=0;i<10;++i) {
-		ck_assert_int_eq(vt->screen.chars[i].c, '2');
-		ck_assert_int_eq(vt->screen.chars[10+i].c, ' ');
+	for(uint8_t j=0;j<vt->screen.nline-move;++j) {
+		for(uint8_t i=0;i<vt->screen.ncol;++i) {
+			_ck_assert_char(TMT_CHAR(vt,j,i).c, ==, '0' + i + j + move);
+		}
 	}
+	for(uint8_t j=vt->screen.nline-move;j<vt->screen.nline;++j) {
+		for(uint8_t i=0;i<vt->screen.ncol;++i) {
+			_ck_assert_char(TMT_CHAR(vt,j,i).c, ==, ' ');
+		}
+	}
+
 	tmt_close(vt);
 }
 END_TEST
