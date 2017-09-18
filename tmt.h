@@ -155,7 +155,8 @@ struct TMT{
 
     bool dirty, acs, ignored;
     TMTSCREEN screen;
-    TMTCHAR *tabs; //! ncol elements
+
+    char *tabs; //! ncol elements. if tabs[i] == '*' then there is a tab on column 'i'.
 
     TMTCALLBACK cb;
     void *p;
@@ -180,10 +181,10 @@ bool tmt_resize(TMT *vt, size_t nline, size_t ncol);
 #define TMT_DECLARE(var_vt, var_lineattrs, var_chars, var_tabs, nline, ncol) \
 		TMTCHAR (var_chars) [(nline)*(ncol)]; \
 		TMTLINEATTRS (var_lineattrs) [(nline)]; \
-		TMTCHAR (var_tabs) [(ncol)]; \
+		char (var_tabs) [(ncol)]; \
 		TMT (var_vt)
 
-bool tmt_init(TMT *vt, TMTLINEATTRS *lineattrs, TMTCHAR *chars, TMTCHAR *tabs,
+bool tmt_init(TMT *vt, TMTLINEATTRS *lineattrs, TMTCHAR *chars, char *tabs,
 		size_t nline, size_t ncol, TMTCALLBACK cb, void *p,
          const wchar_t *acs);
 void tmt_deinit(TMT *vt);

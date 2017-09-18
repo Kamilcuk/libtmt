@@ -57,10 +57,10 @@
 #define UNUSED(x) ((void)x) //! remove unused warning from a variable
 
 #define COMMON_VARS             \
-    TMTSCREEN *s = &vt->screen;   UNUSED(s); \
-    TMTPOINT *c = &vt->curs;      UNUSED(c); \
-    TMTCHAR *l = CLINE(vt);       UNUSED(l); \
-    TMTCHAR *t = vt->tabs;        UNUSED(t)
+    TMTSCREEN *s = &vt->screen; UNUSED(s); \
+    TMTPOINT *c = &vt->curs;    UNUSED(c); \
+    TMTCHAR *l = CLINE(vt);     UNUSED(l); \
+    char *t = vt->tabs;         UNUSED(t)
 
 #define HANDLER(name) static void name (TMT *vt) { COMMON_VARS; 
 
@@ -248,12 +248,12 @@ handlechar(TMT *vt, char i)
 
     DO(S_NUL, "\x07",       CB(vt, TMT_MSG_BELL, NULL))
     DO(S_NUL, "\x08",       if (c->c) c->c--)
-    DO(S_NUL, "\x09",       while (++c->c < s->ncol - 1 && t[c->c].c != L'*'))
+    DO(S_NUL, "\x09",       while (++c->c < s->ncol - 1 && t[c->c] != '*'))
     DO(S_NUL, "\x0a",       c->r < s->nline - 1? (void)c->r++ : scrup(vt, 0, 1))
     DO(S_NUL, "\x0d",       c->c = 0)
     ON(S_NUL, "\x1b",       vt->state = S_ESC)
     ON(S_ESC, "\x1b",       vt->state = S_ESC)
-    DO(S_ESC, "H",          t[c->c].c = L'*')
+    DO(S_ESC, "H",          t[c->c] = '*')
     DO(S_ESC, "7",          vt->oldcurs = vt->curs; vt->oldattrs = vt->attrs)
     DO(S_ESC, "8",          vt->curs = vt->oldcurs; vt->attrs = vt->oldattrs)
     ON(S_ESC, "+*()",       vt->ignored = true; vt->state = S_ARG)
@@ -272,7 +272,7 @@ handlechar(TMT *vt, char i)
     DO(S_ARG, "G",          c->c = MIN(P1(0) - 1, s->ncol - 1))
     DO(S_ARG, "d",          c->r = MIN(P1(0) - 1, s->nline - 1))
     DO(S_ARG, "Hf",         c->r = P1(0) - 1; c->c = P1(1) - 1)
-    DO(S_ARG, "I",          while (++c->c < s->ncol - 1 && t[c->c].c != L'*'))
+    DO(S_ARG, "I",          while (++c->c < s->ncol - 1 && t[c->c] != '*'))
     DO(S_ARG, "J",          ed(vt))
     DO(S_ARG, "K",          el(vt))
     DO(S_ARG, "L",          scrdn(vt, c->r, P1(0)))
@@ -281,10 +281,10 @@ handlechar(TMT *vt, char i)
     DO(S_ARG, "S",          scrup(vt, 0, P1(0)))
     DO(S_ARG, "T",          scrdn(vt, 0, P1(0)))
     DO(S_ARG, "X",          clearline(vt, c->r, c->c, P1(0)))
-    DO(S_ARG, "Z",          while (c->c && t[--c->c].c != L'*'))
+    DO(S_ARG, "Z",          while (c->c && t[--c->c] != '*'))
     DO(S_ARG, "b",          rep(vt));
     DO(S_ARG, "c",          CB(vt, TMT_MSG_ANSWER, "\033[?6c"))
-    DO(S_ARG, "g",          if (P0(0) == 3) clearchars(vt->tabs, s->ncol))
+    DO(S_ARG, "g",          if (P0(0) == 3) memset(vt->tabs, ' ', s->ncol))
     DO(S_ARG, "m",          sgr(vt))
     DO(S_ARG, "n",          if (P0(0) == 6) dsr(vt))
     DO(S_ARG, "h",          if (P0(0) == 25) CB(vt, TMT_MSG_CURSOR, "t"))
@@ -317,7 +317,7 @@ tmt_resize_realloc(TMT *vt, size_t nline, size_t ncol)
     if (!d) return false;
     vt->screen.lineattrs = d;
 
-    TMTCHAR *t = realloc(vt->tabs, ncol * sizeof(TMTCHAR));
+    char *t = realloc(vt->tabs, ncol * sizeof(char));
     if (!t) return false;
     vt->tabs = t;
 
@@ -334,6 +334,12 @@ _tmt_init(TMT *vt, size_t nline, size_t ncol, TMTCALLBACK cb, void *p,
     vt->p = p;
 
     tmt_resize_static(vt, nline, ncol);
+
+    memset(vt->tabs, ' ', ncol * sizeof(char));
+    for(size_t i = 0; i < vt->screen.nline; i+=TMT_TAB) {
+    	vt->tabs[i] = '*';
+    }
+
     return true;
 }
 
@@ -369,7 +375,7 @@ tmt_resize(TMT *vt, size_t nline, size_t ncol)
 }
 
 bool
-tmt_init(TMT *vt, TMTLINEATTRS *lineattrs, TMTCHAR *chars, TMTCHAR *tabs,
+tmt_init(TMT *vt, TMTLINEATTRS *lineattrs, TMTCHAR *chars, char *tabs,
 		size_t nline, size_t ncol, TMTCALLBACK cb, void *p,
         const wchar_t *acs)
 {
@@ -379,7 +385,6 @@ tmt_init(TMT *vt, TMTLINEATTRS *lineattrs, TMTCHAR *chars, TMTCHAR *tabs,
 
 	vt->screen.chars = chars;
 	vt->screen.lineattrs = lineattrs;
-	vt->tabs = tabs;
 
 	return _tmt_init(vt, nline, ncol, cb, p, acs);
 }
@@ -424,11 +429,6 @@ tmt_resize_static(TMT *vt, size_t nline, size_t ncol)
     tmt_resize_screen(vt->screen.chars, nline, ncol, vt->screen.nline, vt->screen.ncol);
     vt->screen.ncol = ncol;
     vt->screen.nline = nline;
-
-    clearchars(vt->tabs, ncol);
-    vt->tabs[0].c = vt->tabs[ncol - 1].c = L'*';
-    for (size_t i = 0; i < ncol; i++) if (i % TMT_TAB == 0)
-        vt->tabs[i].c = L'*';
 
     fixcursor(vt);
     dirtylines(vt, 0, nline);
