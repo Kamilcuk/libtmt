@@ -6,7 +6,7 @@ define \n
 endef
 
 CC=gcc
-CFLAGS=-Wall -I. -I.. -g3 -O0 -std=c99
+CFLAGS=-Wall -I. -I.. -g3 -O0 -std=c99 -D_XOPEN_SOURCE
 LDFLAGS=-lcheck
 mains = $(patsubst %-check.c, %-check.out, $(wildcard ./*-check.c)) main.out 
 

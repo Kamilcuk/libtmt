@@ -440,8 +440,7 @@ writecharatcurs(TMT *vt, wchar_t w)
 {
     COMMON_VARS;
 
-    #ifdef TMT_HAS_WCWIDTH
-    extern int wcwidth(wchar_t c);
+    #ifdef __USE_XOPEN
     if (wcwidth(w) > 1)  w = TMT_INVALID_CHAR;
     if (wcwidth(w) < 0) return;
     #endif
